@@ -75,17 +75,29 @@ class ToolRegistry:
                     continue
                 found.append({"name": m.group(1), "arguments": args if isinstance(args, dict) else {}})
 
-        # Last resort: execute fenced shell snippets as run_shell (one command per non-empty line)
+        # Last resort: fenced source code => run_code ; shell fences => run_shell
         if not found:
-            for m in BASH_FENCE_RE.finditer(text):
-                block = m.group(1).strip()
-                for line in block.splitlines():
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    found.append({"name": "run_shell", "arguments": {"command": line}})
-                if found:
-                    break
+            from agent.runners import extract_fenced_code
+
+            fenced = extract_fenced_code(text)
+            if fenced:
+                for lang, code in fenced:
+                    found.append(
+                        {
+                            "name": "run_code",
+                            "arguments": {"language": lang, "code": code, "keep": True},
+                        }
+                    )
+            else:
+                for m in BASH_FENCE_RE.finditer(text):
+                    block = m.group(1).strip()
+                    for line in block.splitlines():
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        found.append({"name": "run_shell", "arguments": {"command": line}})
+                    if found:
+                        break
 
         return found
 
@@ -155,6 +167,42 @@ class ToolRegistry:
         )
         self.register(
             Tool(
+                name="write_script",
+                description=(
+                    "Create a script under scripts/ for a language "
+                    "(python, javascript, bash, powershell, c, cpp, go, rust, java, ruby, perl, php, lua, r, ...)"
+                ),
+                parameters={"language": "str", "code": "str", "filename": "str optional"},
+                handler=self._write_script,
+            )
+        )
+        self.register(
+            Tool(
+                name="run_script",
+                description="Execute an existing script file (language auto-detected from extension)",
+                parameters={"path": "str", "language": "str optional", "timeout": "int optional"},
+                handler=self._run_script,
+            )
+        )
+        self.register(
+            Tool(
+                name="run_code",
+                description=(
+                    "Write and execute code in one shot. "
+                    "language: python|javascript|bash|powershell|c|cpp|go|rust|java|..."
+                ),
+                parameters={
+                    "language": "str",
+                    "code": "str",
+                    "filename": "str optional",
+                    "keep": "bool default true",
+                    "timeout": "int optional",
+                },
+                handler=self._run_code,
+            )
+        )
+        self.register(
+            Tool(
                 name="run_shell",
                 description="Run a shell command in the workspace (timeout 60s)",
                 parameters={"command": "str"},
@@ -212,6 +260,57 @@ class ToolRegistry:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(str(args.get("content", "")), encoding="utf-8")
         return f"OK wrote {path}"
+
+    def _write_script(self, args: dict[str, Any]) -> str:
+        from agent.runners import default_hello, normalize_lang, stamp_name
+
+        lang = normalize_lang(str(args.get("language", "python")))
+        code = str(args.get("code") or default_hello(lang))
+        filename = args.get("filename")
+        rel = stamp_name(lang, str(filename) if filename else None)
+        if not rel.startswith("scripts/"):
+            rel = f"scripts/{Path(rel).name}"
+        path = self._safe_path(rel)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(code, encoding="utf-8", newline="\n")
+        return f"OK wrote script lang={lang} path={path}"
+
+    def _run_script(self, args: dict[str, Any]) -> str:
+        from agent.runners import detect_lang_from_path, run_script_path
+
+        rel = str(args.get("path", ""))
+        if not rel.strip():
+            return "ERROR: empty path"
+        path = self._safe_path(rel)
+        if not path.exists():
+            return f"ERROR: missing {path}"
+        lang = str(args.get("language") or detect_lang_from_path(path))
+        timeout = int(args.get("timeout", 60))
+        return run_script_path(lang, path, self.workspace, timeout=timeout)
+
+    def _run_code(self, args: dict[str, Any]) -> str:
+        from agent.runners import default_hello, normalize_lang, run_script_path, stamp_name
+
+        lang = normalize_lang(str(args.get("language", "python")))
+        code = str(args.get("code") or default_hello(lang))
+        filename = args.get("filename")
+        keep = bool(args.get("keep", True))
+        timeout = int(args.get("timeout", 60))
+        rel = stamp_name(lang, str(filename) if filename else None)
+        if not rel.startswith("scripts/"):
+            rel = f"scripts/{Path(rel).name}"
+        path = self._safe_path(rel)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(code, encoding="utf-8", newline="\n")
+        try:
+            result = run_script_path(lang, path, self.workspace, timeout=timeout)
+            return f"path={path}\n{result}"
+        finally:
+            if not keep:
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
     def _run_shell(self, args: dict[str, Any]) -> str:
         import platform

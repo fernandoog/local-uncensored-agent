@@ -36,9 +36,11 @@ class ReasoningEngine:
         base += "\nTools:\n" + self.tools.schema_text()
         base += (
             "\n\nEXAMPLES (copy this style exactly):\n"
-            'User: crea un directorio tmpdemo\n'
+            "User: crea un directorio tmpdemo\n"
             'Assistant:\n```tool\n{"name":"mkdir","arguments":{"path":"tmpdemo"}}\n```\n'
-            'User: borra el directorio tmpdemo\n'
+            "User: crea un script python que imprima hola y ejecutalo\n"
+            'Assistant:\n```tool\n{"name":"run_code","arguments":{"language":"python","code":"print(\'hola\')"}}\n```\n'
+            "User: borra el directorio tmpdemo\n"
             'Assistant:\n```tool\n{"name":"rm_path","arguments":{"path":"tmpdemo","recursive":true}}\n```\n'
         )
         return base

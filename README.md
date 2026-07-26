@@ -226,6 +226,7 @@ agent/
   pipeline.py
   config.py             MODEL_CATALOG (uncensored-first)
 models/                 *.gguf (gitignored)
+scripts/                generated scripts
 data/memory.jsonl       persistent memory
 ```
 

@@ -2,6 +2,8 @@
 models/*.gguf
 models/**/*.gguf
 !models/.gitkeep
+scripts/*
+!scripts/.gitkeep
 data/memory.jsonl
 data/*.jsonl
 !data/.gitkeep
