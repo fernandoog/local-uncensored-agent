@@ -9,13 +9,46 @@ models/*
 models/**/*.safetensors
 models/**/*.bin
 
+# Agent-generated scripts (run_code / write_script)
 scripts/*
 !scripts/.gitkeep
-data/memory.jsonl
-data/*.jsonl
+
+# Persistent memory / runtime data
+data/*
 !data/.gitkeep
+
+# All generated media + tool outputs (image / audio / video / misc)
+outputs/*
+!outputs/.gitkeep
+!outputs/media/
+outputs/media/*
+!outputs/media/.gitkeep
+
+# Generated media anywhere under the repo (agent may write outside outputs/)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+*.mp4
+*.webm
+*.avi
+*.mov
+*.mkv
+*.wav
+*.mp3
+*.ogg
+*.flac
+*.m4a
+*.aac
+
+# Local notes / logs / temp agent junk
 Notas.txt
 *.log
+_agent_tmp*
+tmp/
+temp/
 
 # Secrets / local env
 .env

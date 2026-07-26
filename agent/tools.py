@@ -217,6 +217,56 @@ class ToolRegistry:
                 handler=self._calc,
             )
         )
+        self.register(
+            Tool(
+                name="generate_image",
+                description=(
+                    "Generate an image from a text prompt and save PNG under outputs/media. "
+                    "Offline Pillow by default; set MEDIA_SD_API_URL for Automatic1111/Forge."
+                ),
+                parameters={
+                    "prompt": "str",
+                    "out": "str optional relative path",
+                    "width": "int optional default 768",
+                    "height": "int optional default 512",
+                },
+                handler=self._generate_image,
+            )
+        )
+        self.register(
+            Tool(
+                name="generate_audio",
+                description=(
+                    "Generate sound WAV from a prompt (synth tone) or TTS if pyttsx3 + MEDIA_TTS=1. "
+                    "Saves under outputs/media."
+                ),
+                parameters={
+                    "prompt": "str (description or spoken text)",
+                    "out": "str optional",
+                    "seconds": "float optional default 4",
+                    "mode": "auto|tone|tts optional",
+                    "voice": "auto|female|male optional",
+                },
+                handler=self._generate_audio,
+            )
+        )
+        self.register(
+            Tool(
+                name="generate_video",
+                description=(
+                    "Generate a short animated video/GIF from a text prompt under outputs/media."
+                ),
+                parameters={
+                    "prompt": "str",
+                    "out": "str optional (.gif or .mp4)",
+                    "seconds": "float optional default 2",
+                    "fps": "int optional default 8",
+                    "width": "int optional",
+                    "height": "int optional",
+                },
+                handler=self._generate_video,
+            )
+        )
 
     def _list_dir(self, args: dict[str, Any]) -> str:
         path = self._safe_path(str(args.get("path", ".")))
@@ -315,9 +365,16 @@ class ToolRegistry:
     def _run_shell(self, args: dict[str, Any]) -> str:
         import platform
 
+        from agent.refusal import looks_like_fake_media_shell
+
         cmd = str(args.get("command", ""))
         if not cmd:
             return "ERROR: empty command"
+        if looks_like_fake_media_shell(cmd):
+            return (
+                "ERROR: fake media shell blocked. "
+                "Use generate_audio / generate_image / generate_video instead of afplay paths."
+            )
         proc = subprocess.run(
             cmd,
             shell=True,
@@ -338,3 +395,94 @@ class ToolRegistry:
         if not expr or any(c not in allowed for c in expr):
             return "ERROR: invalid expression"
         return str(eval(expr, {"__builtins__": {}}, {}))
+
+    def _media_out(self, rel: str | None, default_ext: str) -> Path:
+        if rel and str(rel).strip():
+            p = self._safe_path(str(rel))
+        else:
+            import time
+
+            stamp = time.strftime("%Y%m%d_%H%M%S")
+            p = self._safe_path(f"outputs/media/media_{stamp}{default_ext}")
+        if p.suffix.lower() not in {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".mp4",
+            ".wav",
+            ".mp3",
+            ".webp",
+        }:
+            p = p.with_suffix(default_ext)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def _generate_image(self, args: dict[str, Any]) -> str:
+        from agent.media import generate_image
+
+        prompt = str(args.get("prompt") or args.get("text") or "").strip()
+        if not prompt:
+            return "ERROR: prompt required"
+        out = self._media_out(args.get("out"), ".png")
+        # include prompt slug in default name
+        if not args.get("out"):
+            from agent.media import _slug
+            import time
+
+            stamp = time.strftime("%Y%m%d_%H%M%S")
+            out = self._safe_path(f"outputs/media/img_{_slug(prompt)}_{stamp}.png")
+            out.parent.mkdir(parents=True, exist_ok=True)
+        result = generate_image(
+            prompt,
+            out=out,
+            width=int(args.get("width", 768)),
+            height=int(args.get("height", 512)),
+            backend=args.get("backend"),
+        )
+        return json.dumps(result, ensure_ascii=False)
+
+    def _generate_audio(self, args: dict[str, Any]) -> str:
+        from agent.media import generate_audio, _slug
+        import time
+
+        prompt = str(args.get("prompt") or args.get("text") or "").strip()
+        if not prompt:
+            return "ERROR: prompt required"
+        if args.get("out"):
+            out = self._media_out(args.get("out"), ".wav")
+        else:
+            stamp = time.strftime("%Y%m%d_%H%M%S")
+            out = self._safe_path(f"outputs/media/audio_{_slug(prompt)}_{stamp}.wav")
+            out.parent.mkdir(parents=True, exist_ok=True)
+        result = generate_audio(
+            prompt,
+            out=out,
+            seconds=float(args.get("seconds", 4)),
+            mode=args.get("mode"),
+            voice=str(args.get("voice") or "auto"),
+        )
+        return json.dumps(result, ensure_ascii=False)
+
+    def _generate_video(self, args: dict[str, Any]) -> str:
+        from agent.media import generate_video, _slug
+        import time
+
+        prompt = str(args.get("prompt") or args.get("text") or "").strip()
+        if not prompt:
+            return "ERROR: prompt required"
+        if args.get("out"):
+            out = self._media_out(args.get("out"), ".gif")
+        else:
+            stamp = time.strftime("%Y%m%d_%H%M%S")
+            out = self._safe_path(f"outputs/media/video_{_slug(prompt)}_{stamp}.gif")
+            out.parent.mkdir(parents=True, exist_ok=True)
+        result = generate_video(
+            prompt,
+            out=out,
+            seconds=float(args.get("seconds", 2)),
+            fps=int(args.get("fps", 8)),
+            width=int(args.get("width", 512)),
+            height=int(args.get("height", 320)),
+        )
+        return json.dumps(result, ensure_ascii=False)

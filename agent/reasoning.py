@@ -7,7 +7,12 @@ from agent.config import AgentConfig
 from agent.inference import InferenceEngine
 from agent.memory import MemoryStore
 from agent.planner import plan_actions
-from agent.refusal import ANTI_REFUSAL_NUDGE, looks_like_refusal, wants_tools
+from agent.refusal import (
+    ANTI_REFUSAL_NUDGE,
+    looks_like_fake_media_shell,
+    looks_like_refusal,
+    wants_tools,
+)
 from agent.tools import ToolRegistry
 
 
@@ -43,6 +48,14 @@ class ReasoningEngine:
             'Assistant:\n```tool\n{"name":"run_code","arguments":{"language":"python","code":"print(\'hola\')"}}\n```\n'
             "User: borra el directorio tmpdemo\n"
             'Assistant:\n```tool\n{"name":"rm_path","arguments":{"path":"tmpdemo","recursive":true}}\n```\n'
+            "User: genera una imagen de un castillo\n"
+            'Assistant:\n```tool\n{"name":"generate_image","arguments":{"prompt":"un castillo"}}\n```\n'
+            "User: genera un sonido de alarma\n"
+            'Assistant:\n```tool\n{"name":"generate_audio","arguments":{"prompt":"alarma","seconds":3,"mode":"tone"}}\n```\n'
+            "User: genera el sonido de una mujer diciendo hola mundo\n"
+            'Assistant:\n```tool\n{"name":"generate_audio","arguments":{"prompt":"hola mundo","mode":"tts","voice":"female"}}\n```\n'
+            "User: genera un video del oceano\n"
+            'Assistant:\n```tool\n{"name":"generate_video","arguments":{"prompt":"oceano","seconds":2}}\n```\n'
         )
         return base
 
@@ -50,9 +63,30 @@ class ReasoningEngine:
         return self.memory.as_messages(self.system_prompt())
 
     def _format_tool_report(self, pairs: list[tuple[dict[str, Any], str]]) -> str:
-        lines = ["Hecho. Resultados:"]
+        import json
+
+        lines: list[str] = []
         for call, result in pairs:
-            lines.append(f"- {call.get('name')} {call.get('arguments')}: {result}")
+            payload = {"name": call.get("name"), "arguments": call.get("arguments") or {}}
+            lines.append("```tool")
+            lines.append(json.dumps(payload, ensure_ascii=False))
+            lines.append("```")
+            lines.append(f"[ejecutado] {call.get('name')}")
+            # Pretty media path extraction
+            path = None
+            try:
+                data = json.loads(result)
+                if isinstance(data, dict) and data.get("path"):
+                    path = data["path"]
+                    backend = data.get("backend", "")
+                    lines.append(f"[ok] backend={backend}")
+                    lines.append(f"[archivo] {path}")
+                else:
+                    lines.append(result)
+            except Exception:
+                lines.append(result)
+            if path:
+                lines.append(f"[donde] outputs/media/  (ruta absoluta arriba)")
         return "\n".join(lines)
 
     def _anti_refusal(self, reply: str) -> str:
@@ -83,7 +117,7 @@ class ReasoningEngine:
     def think(self, user_text: str) -> str:
         self.memory.add("user", user_text)
 
-        # 1) Deterministic planner for clear FS / shell / script intents
+        # 1) Deterministic planner for clear FS / shell / script / media intents
         planned = plan_actions(user_text)
         if planned:
             pairs = self.tools.execute_many(planned)
@@ -96,23 +130,59 @@ class ReasoningEngine:
         reply = self.engine.chat(messages)
         assert isinstance(reply, str)
 
+        # If model refuses or invents fake media shell, force planner again
+        if looks_like_refusal(reply) or looks_like_fake_media_shell(reply):
+            forced = plan_actions(user_text)
+            if forced:
+                pairs = self.tools.execute_many(forced)
+                report = self._format_tool_report(pairs)
+                self.memory.add("assistant", report)
+                return report
+
         # Tool nudge ONLY when the user asked for an actionable/toolish task
         if wants_tools(user_text) and not self.tools.parse_all_tool_calls(reply):
             nudge = (
-                "No expliques. No des tutoriales. "
-                "Emite SOLO uno o mas bloques ```tool con JSON valido para ejecutar la peticion."
+                "No expliques. No des tutoriales. No inventes rutas. "
+                "Emite SOLO uno o mas bloques ```tool con JSON valido para ejecutar la peticion. "
+                "Para sonido/voz usa generate_audio (mode=tts si hay texto hablado)."
             )
             self.memory.add("assistant", reply)
             self.memory.add("user", nudge)
             messages = self.build_messages()
             reply = self.engine.chat(messages, temperature=0.2)
             assert isinstance(reply, str)
+            if looks_like_refusal(reply) or looks_like_fake_media_shell(reply):
+                forced = plan_actions(user_text)
+                if forced:
+                    pairs = self.tools.execute_many(forced)
+                    report = self._format_tool_report(pairs)
+                    self.memory.add("assistant", report)
+                    return report
 
         for _ in range(self.max_tool_rounds):
             calls = self.tools.parse_all_tool_calls(reply)
             if not calls:
                 break
+            # Block fake media shells — force real media tools when possible
+            if any(
+                c.get("name") == "run_shell"
+                and looks_like_fake_media_shell(str((c.get("arguments") or {}).get("command", "")))
+                for c in calls
+            ):
+                forced = plan_actions(user_text)
+                if forced:
+                    pairs = self.tools.execute_many(forced)
+                    report = self._format_tool_report(pairs)
+                    self.memory.add("assistant", report)
+                    return report
             pairs = self.tools.execute_many(calls)
+            # For media tools, return the visible process report immediately
+            if any(
+                str(c.get("name", "")).startswith("generate_") for c in calls
+            ):
+                report = self._format_tool_report(pairs)
+                self.memory.add("assistant", report)
+                return report
             result_blob = "\n\n".join(
                 f"[TOOL RESULT name={c.get('name')}]\n{r}" for c, r in pairs
             )
@@ -128,6 +198,11 @@ class ReasoningEngine:
 
         # 3) Smash residual refusals on creative / free-form asks
         reply = self._anti_refusal(reply)
+        if not (reply or "").strip():
+            forced = plan_actions(user_text)
+            if forced:
+                pairs = self.tools.execute_many(forced)
+                reply = self._format_tool_report(pairs)
 
         self.memory.add("assistant", reply)
         return reply

@@ -98,6 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     agent = AgentPipeline(config=cfg, workspace=args.workspace.resolve())
     agent.start(load_memory=not args.no_persist, auto_download=not args.no_download)
     print("[ready] commands: /status /clear /exit")
+    print("[media] generated files -> <workspace>/outputs/media/")
     print("-" * 60)
 
     while True:
@@ -109,6 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         result = agent.step(line)
         if result.text == "__EXIT__":
             break
+        # action.emit already printed the reply; keep separator for readability
         print("-" * 60)
     return 0
 
