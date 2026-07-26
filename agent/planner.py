@@ -71,11 +71,17 @@ def plan_actions(user_text: str) -> list[dict[str, Any]]:
         and re.search(r"\b(directorio|carpeta|folder|dir|directory)\b", lower)
     )
     wants_delete = bool(
-        re.search(r"\b(borra|borrar|elimina|eliminar|delete|remove|rm|quita|quitar)\b", lower)
+        re.search(
+            r"\b(borra|borrar|borralo|borrala|borralos|borrarlo|borrarla|"
+            r"elimina|eliminar|eliminalo|eliminarlo|delete|remove|rm|quita|quitar)\b",
+            lower,
+        )
         and (
             re.search(r"\b(directorio|carpeta|folder|dir|directory|archivo|file)\b", lower)
             or "luego" in lower
             or "after" in lower
+            or "despues" in lower
+            or "después" in lower
             or wants_create
         )
     )
