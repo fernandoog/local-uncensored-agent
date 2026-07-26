@@ -10,17 +10,48 @@ from typing import Any
 
 
 def _name_from_text(text: str, default: str = "_agent_tmp") -> str:
+    stop = {
+        "y",
+        "and",
+        "luego",
+        "then",
+        "despues",
+        "después",
+        "despues",
+        "para",
+        "con",
+        "sin",
+        "el",
+        "la",
+        "un",
+        "una",
+        "the",
+        "a",
+        "an",
+        "borralo",
+        "borrala",
+        "eliminarlo",
+        "eliminarla",
+    }
     # quoted name
     m = re.search(r'["\']([A-Za-z0-9._\\/-]+)["\']', text)
     if m:
         return m.group(1).replace("\\", "/").strip("/")
-    # "llamado X" / "called X" / "nombre X"
+    # "llamado X" / "called X" / "nombre X" / "carpeta X"
     m = re.search(
-        r"(?:llamad[oa]|called|named|nombre|name|dir|carpeta|folder|directorio)\s+[\"']?([A-Za-z0-9._-]+)[\"']?",
+        r"(?:llamad[oa]|called|named|nombre|name)\s+[\"']?([A-Za-z0-9._-]+)[\"']?",
         text,
         re.I,
     )
-    if m:
+    if m and m.group(1).lower() not in stop:
+        return m.group(1)
+    # "directorio X" only if X is not a conjunction / verb remnant
+    m = re.search(
+        r"(?:dir|carpeta|folder|directorio)\s+[\"']?([A-Za-z0-9._-]+)[\"']?",
+        text,
+        re.I,
+    )
+    if m and m.group(1).lower() not in stop:
         return m.group(1)
     return default
 
