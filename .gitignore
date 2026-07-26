@@ -1,0 +1,269 @@
+# --- Project ---
+models/*.gguf
+models/**/*.gguf
+!models/.gitkeep
+data/memory.jsonl
+data/*.jsonl
+!data/.gitkeep
+Notas.txt
+*.log
+*.gguf
+
+# Secrets / local env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.*
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.ipynb_checkpoints/
+.python-version
+__pypackages__/
+celerybeat-schedule
+celerybeat.pid
+
+# Virtual environments
+.venv/
+.venv*/
+venv/
+ENV/
+env/
+.env/
+.venvs/
+.virtualenv/
+.conda/
+
+# Packaging caches
+.pdm-python
+.pdm-build/
+
+# --- OS ---
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.stackdump
+[Dd]esktop.ini
+*.lnk
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# --- IDEs / editors ---
+# Visual Studio Code / Cursor
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+.cursor/
+.history/
+*.code-workspace
+
+# JetBrains (PyCharm, IntelliJ, WebStorm, CLion, Rider…)
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+*.VC.db
+*.VC.VC.opendb
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+# Eclipse / PyDev
+.project
+.classpath
+.settings/
+.cproject
+.factorypath
+.pydevproject
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim / Neovim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+Session.vim
+Sessionx.vim
+.netrwhist
+tags
+[._]*.un~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Kate / KDevelop
+*.kdev4
+.kdev4/
+*.kate-swp
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.createlist
+*.qtc.user
+*.qtc.user.*
+
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+*.xcworkspace
+xcuserdata/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Android Studio / Gradle (if ever mixed)
+.gradle/
+local.properties
+*.apk
+*.ap_
+*.aab
+captures/
+
+# NetBeans
+nbproject/private/
+nbbuild/
+nbdist/
+.nb-gradle/
+
+# Spyder
+.spyderproject
+.spyproject
+
+# Rope
+.ropeproject/
+
+# Jupyter Lab
+.jupyter/
+
+# --- Build / C / native (llama-cpp local builds) ---
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.dylib
+
+# --- Misc tooling ---
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.orig
+.parcel-cache/
+.turbo/
+.node_modules/
+node_modules/
