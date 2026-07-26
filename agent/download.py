@@ -3,26 +3,35 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent.config import MODEL_CATALOG, MODELS_DIR, ensure_dirs
+from agent.config import (
+    MODELS_DIR,
+    assert_uncensored_model,
+    ensure_dirs,
+    print_disclaimer,
+)
 
 
 def ensure_model(model_key: str, model_path: Path | None = None) -> Path:
     """
     Return a local GGUF path. If missing and the catalog entry is downloadable,
     fetch it into MODELS_DIR automatically.
+
+    Only uncensored catalog models are allowed.
     """
     ensure_dirs()
 
     if model_path is not None:
         path = Path(model_path)
         if path.exists():
+            print(
+                "[disclaimer] Custom --model-path in use. "
+                "You assume full responsibility for that GGUF and its outputs."
+            )
+            print_disclaimer()
             return path.resolve()
         raise FileNotFoundError(f"Explicit model path not found: {path}")
 
-    if model_key not in MODEL_CATALOG:
-        raise KeyError(f"Unknown model_key '{model_key}'. Known: {list(MODEL_CATALOG)}")
-
-    meta = MODEL_CATALOG[model_key]
+    meta = assert_uncensored_model(model_key)
     dest = MODELS_DIR / meta["filename"]
     if dest.exists() and dest.stat().st_size > 0:
         return dest.resolve()
@@ -34,9 +43,11 @@ def ensure_model(model_key: str, model_path: Path | None = None) -> Path:
             "Or pass --model-path to main.py"
         )
 
-    print(f"[download] fetching {repo_id} / {meta['filename']}")
+    print_disclaimer()
+    print(f"[download] fetching UNCENSORED model {repo_id} / {meta['filename']}")
     print(f"[download] target={dest}")
-    print(f"[download] ~4+ GB — first run only")
+    print(f"[download] size≈{meta.get('weight_mb', '?')} MB — first run only")
+    print("[download] By downloading you accept the disclaimer above.")
 
     from huggingface_hub import hf_hub_download
 

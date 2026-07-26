@@ -1,7 +1,14 @@
 # --- Project ---
-models/*.gguf
-models/**/*.gguf
+# GGUF weights + HF download caches — NEVER commit (multi-GB binaries)
+models/*
 !models/.gitkeep
+*.gguf
+**/*.gguf
+*.gguf.incomplete
+*.gguf.tmp
+models/**/*.safetensors
+models/**/*.bin
+
 scripts/*
 !scripts/.gitkeep
 data/memory.jsonl
@@ -9,7 +16,6 @@ data/*.jsonl
 !data/.gitkeep
 Notas.txt
 *.log
-*.gguf
 
 # Secrets / local env
 .env

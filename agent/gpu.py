@@ -252,8 +252,8 @@ def _ctx_for_budget(mem_mb: int, weight_mb: int, backend: Backend) -> tuple[int,
 
 
 def select_model_for_gpu(gpu: DeviceInfo | None = None) -> ModelSelection:
-    """Choose UNCENSORED open-weight GGUF + knobs from detected device."""
-    from agent.config import PREFER_UNCENSORED
+    """Choose an UNCENSORED open-weight GGUF + knobs from detected device."""
+    from agent.config import REQUIRE_UNCENSORED, uncensored_model_keys
 
     device = gpu or detect_device()
     budget = _budget_mb(device)
@@ -266,34 +266,28 @@ def select_model_for_gpu(gpu: DeviceInfo | None = None) -> ModelSelection:
             return weight <= budget
         return weight <= budget and mem >= min_vram * 0.85
 
-    def collect(*, require_uncensored: bool) -> list[tuple[int, str, dict[str, Any]]]:
+    def collect() -> list[tuple[int, str, dict[str, Any]]]:
         out: list[tuple[int, str, dict[str, Any]]] = []
         for key, meta in MODEL_CATALOG.items():
             if not meta.get("auto_select", False):
                 continue
             if str(meta.get("repo_id", "")).startswith("local/"):
                 continue
-            if require_uncensored and not meta.get("uncensored", False):
+            if REQUIRE_UNCENSORED and not meta.get("uncensored", False):
                 continue
             if not fits(meta):
                 continue
             weight = int(meta.get("weight_mb", 99999))
-            unc = 1_000_000 if meta.get("uncensored") else 0
-            # Prefer truly low-refusal models when uncensored mode is on
             risk = int(meta.get("refusal_risk", 50))
             score = (
-                unc
-                + (100 - risk) * 100_000
+                (100 - risk) * 100_000
                 + int(meta.get("quality_score", 0)) * 10_000
                 + weight
             )
             out.append((score, key, meta))
         return out
 
-    candidates = collect(require_uncensored=PREFER_UNCENSORED)
-    if not candidates and PREFER_UNCENSORED:
-        candidates = collect(require_uncensored=False)
-
+    candidates = collect()
     n_threads = recommended_n_threads(device)
 
     if not candidates:
@@ -303,13 +297,12 @@ def select_model_for_gpu(gpu: DeviceInfo | None = None) -> ModelSelection:
             if m.get("auto_select")
             and m.get("uncensored", False)
             and not str(m.get("repo_id", "")).startswith("local/")
-        ] or [
-            (int(m.get("weight_mb", 99999)), k, m)
-            for k, m in MODEL_CATALOG.items()
-            if m.get("auto_select") and not str(m.get("repo_id", "")).startswith("local/")
         ]
         if not fallbacks:
-            raise RuntimeError("No auto-selectable models in MODEL_CATALOG")
+            raise RuntimeError(
+                "No uncensored auto-selectable models in MODEL_CATALOG. "
+                f"Allowed keys: {uncensored_model_keys()}"
+            )
         fallbacks.sort(key=lambda x: x[0])
         _, key, meta = fallbacks[0]
         weight = int(meta["weight_mb"])
@@ -325,7 +318,7 @@ def select_model_for_gpu(gpu: DeviceInfo | None = None) -> ModelSelection:
             flash_attn=False,
             reason=(
                 f"OS={device.os_name} backend={device.backend} device={device.name} "
-                f"mem={mem} MiB. Tight fit -> uncensored '{key}' (~{weight} MB)."
+                f"mem={mem} MiB. Tight fit -> UNCENSORED-ONLY '{key}' (~{weight} MB)."
             ),
         )
 
@@ -347,7 +340,7 @@ def select_model_for_gpu(gpu: DeviceInfo | None = None) -> ModelSelection:
 
     reason = (
         f"OS={device.os_name} backend={device.backend} device={device.name} "
-        f"mem={mem} MiB budget~{budget} MiB -> UNCENSORED model={key} "
+        f"mem={mem} MiB budget~{budget} MiB -> UNCENSORED-ONLY model={key} "
         f"({meta.get('filename')}, ~{weight} MB, license={meta.get('license', 'n/a')}). "
         f"{meta.get('reason', '')}"
     )

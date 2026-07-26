@@ -10,19 +10,28 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from agent.config import AUTO_MODEL, MODEL_CATALOG, AgentConfig, InferenceConfig
+from agent.config import (
+    AUTO_MODEL,
+    AgentConfig,
+    InferenceConfig,
+    assert_uncensored_model,
+    print_disclaimer,
+    uncensored_model_keys,
+)
 from agent.gpu import detect_device, install_hint, select_model_for_gpu
 from agent.pipeline import AgentPipeline
 
 
 def build_parser() -> argparse.ArgumentParser:
-    choices = [AUTO_MODEL, *MODEL_CATALOG.keys()]
-    p = argparse.ArgumentParser(description="Local GGUF agent (Windows/Linux/macOS)")
+    choices = [AUTO_MODEL, *uncensored_model_keys()]
+    p = argparse.ArgumentParser(
+        description="Local UNCENSORED-ONLY GGUF agent (Windows/Linux/macOS)"
+    )
     p.add_argument(
         "--model",
         default=AUTO_MODEL,
         choices=choices,
-        help="Model key, or 'auto' (default) from local device memory",
+        help="Uncensored model key, or 'auto' (default) from local device memory",
     )
     p.add_argument("--model-path", type=Path, default=None)
     p.add_argument("--n-ctx", type=int, default=None)
@@ -32,12 +41,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--workspace", type=Path, default=Path.cwd())
     p.add_argument("--no-persist", action="store_true")
     p.add_argument("--no-download", action="store_true")
-    p.add_argument("--censored", action="store_true")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    print_disclaimer()
+
     device = detect_device()
     print(
         f"[device] os={device.os_name} backend={device.backend} "
@@ -52,26 +62,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[select] {selection.reason}")
     else:
         model_key = args.model
-        print(f"[select] manual model={model_key} (device-tuned ctx/layers)")
+        print(f"[select] manual UNCENSORED model={model_key} (device-tuned ctx/layers)")
 
+    meta = assert_uncensored_model(model_key)
     n_ctx = selection.n_ctx if args.n_ctx is None else args.n_ctx
     n_gpu_layers = selection.n_gpu_layers if args.n_gpu_layers is None else args.n_gpu_layers
-    meta = MODEL_CATALOG[model_key]
     print(f"[boot] model={model_key} file={meta['filename']} format={meta['chat_format']}")
     print(
-        f"[boot] uncensored_model={bool(meta.get('uncensored'))} "
-        f"refusal_risk={meta.get('refusal_risk', '?')} "
-        f"agent_mode={'UNCENSORED' if not args.censored else 'censored'}"
+        f"[boot] uncensored_model=True refusal_risk={meta.get('refusal_risk', '?')} "
+        f"agent_mode=UNCENSORED-ONLY"
     )
     print(
         f"[boot] n_ctx={n_ctx} n_gpu_layers={n_gpu_layers} "
         f"n_batch={selection.n_batch} n_threads={selection.n_threads}"
     )
     if not args.no_download and args.model_path is None:
-        print("[boot] auto-download enabled if GGUF missing")
-    print(
-        "[hint] for max uncensored: python main.py --model qwen25-1.5b-uncensored-es-q4"
-    )
+        print("[boot] auto-download enabled if GGUF missing (uncensored only)")
+    print(f"[hint] uncensored keys: {', '.join(uncensored_model_keys())}")
 
     cfg = AgentConfig(
         inference=InferenceConfig(
@@ -86,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
             max_prompt_tokens=selection.max_prompt_tokens,
             flash_attn=selection.flash_attn,
         ),
-        uncensored=not args.censored,
+        uncensored=True,
     )
     agent = AgentPipeline(config=cfg, workspace=args.workspace.resolve())
     agent.start(load_memory=not args.no_persist, auto_download=not args.no_download)

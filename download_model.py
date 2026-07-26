@@ -9,15 +9,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from agent.config import AUTO_MODEL, MODEL_CATALOG
+from agent.config import AUTO_MODEL, assert_uncensored_model, print_disclaimer, uncensored_model_keys
 from agent.download import ensure_model
 from agent.gpu import detect_device, select_model_for_gpu
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default=AUTO_MODEL, choices=[AUTO_MODEL, *MODEL_CATALOG.keys()])
+    parser = argparse.ArgumentParser(
+        description="Download UNCENSORED-ONLY GGUF models"
+    )
+    parser.add_argument(
+        "--model",
+        default=AUTO_MODEL,
+        choices=[AUTO_MODEL, *uncensored_model_keys()],
+    )
     args = parser.parse_args()
+
+    print_disclaimer()
 
     device = detect_device()
     print(
@@ -32,6 +40,7 @@ def main() -> int:
     else:
         key = args.model
 
+    assert_uncensored_model(key)
     path = ensure_model(key)
     print(f"OK: {path}")
     return 0

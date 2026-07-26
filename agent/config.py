@@ -14,7 +14,7 @@ MODELS_DIR = ROOT / "models"
 DATA_DIR = ROOT / "data"
 MEMORY_FILE = DATA_DIR / "memory.jsonl"
 
-# Prefer models with uncensored=True + open weights (Apache/Qwen/Apache-like).
+# ONLY models with uncensored=True are selectable / downloadable.
 # Example family: https://huggingface.co/mradermacher/Qwen2.5-1.5B-Uncensored_Neurotic_Spanish-GGUF
 MODEL_CATALOG: dict[str, dict[str, Any]] = {
     # --- Uncensored Spanish Qwen 1.5B (open GGUF, fits almost any device) ---
@@ -31,7 +31,7 @@ MODEL_CATALOG: dict[str, dict[str, Any]] = {
         "license": "open-weights (base Qwen Apache-2.0 family; GGUF redistributed)",
         "reason": (
             "Uncensored Spanish Qwen2.5-1.5B Q4_K_M (~1.1 GB). "
-            "Lowest refusal among catalog; preferred when PREFER_UNCENSORED."
+            "Lowest refusal among catalog; preferred when REQUIRE_UNCENSORED."
         ),
     },
     "qwen25-1.5b-uncensored-es-q5": {
@@ -100,20 +100,7 @@ MODEL_CATALOG: dict[str, dict[str, Any]] = {
         "license": "Apache-2.0 (Mistral) / Nous Hermes terms",
         "reason": "Hermes-2-DPO Q5 when ≥10 GB.",
     },
-    # --- Aligned / censored: manual only (never auto) ---
-    "llama3-instruct-8b": {
-        "repo_id": "bartowski/Meta-Llama-3-8B-Instruct-GGUF",
-        "filename": "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
-        "chat_format": "llama-3",
-        "weight_mb": 4700,
-        "min_vram_mb": 10000,
-        "quality_score": 85,
-        "auto_select": False,
-        "uncensored": False,
-        "refusal_risk": 95,
-        "license": "Llama 3 Community License",
-        "reason": "Aligned Instruct — excluded from auto-select.",
-    },
+    # --- Local-only uncensored (place GGUF manually) ---
     "mythomax-lite-7b": {
         "repo_id": "local/MythoMax-Lite-7B-GGUF",
         "filename": "MythoMax-Lite-7B.Q4_K_M.gguf",
@@ -132,7 +119,68 @@ MODEL_CATALOG: dict[str, dict[str, Any]] = {
 # Preferred explicit key (auto still wins unless --model is set)
 ACTIVE_MODEL_KEY = "qwen25-1.5b-uncensored-es-q4"
 AUTO_MODEL = "auto"
+# Hard rule: never select, download, or load a censored / aligned catalog entry.
+REQUIRE_UNCENSORED = True
+# Alias kept for older call sites
 PREFER_UNCENSORED = True
+
+DISCLAIMER_ES = """\
+========================================================================
+ADVERTENCIA / DESCARGA DE RESPONSABILIDADES
+------------------------------------------------------------------------
+Este software descarga y ejecuta modelos UNCENSORED (sin filtro moral).
+Puede generar texto ofensivo, adulto, polemico o incorrecto.
+
+TU eres el unico responsable de:
+  - lo que pides al modelo
+  - lo que generas, guardas o ejecutas con las tools (scripts/shell)
+  - cumplir la ley de tu jurisdiccion
+
+Los autores del proyecto NO se hacen responsables del uso indebido,
+danos, delitos o consecuencias derivadas. Uso bajo tu propio riesgo.
+Al continuar (descarga o arranque) aceptas estos terminos.
+========================================================================"""
+
+DISCLAIMER_EN = """\
+========================================================================
+WARNING / DISCLAIMER OF LIABILITY
+------------------------------------------------------------------------
+This software downloads and runs UNCENSORED models (no moral filter).
+It may produce offensive, adult, controversial, or incorrect text.
+
+YOU alone are responsible for:
+  - what you ask the model
+  - what you generate, save, or run via tools (scripts/shell)
+  - complying with the law in your jurisdiction
+
+Project authors accept NO liability for misuse, damage, crime, or
+any resulting consequences. Use at your own risk.
+By continuing (download or boot) you accept these terms.
+========================================================================"""
+
+
+def uncensored_model_keys() -> list[str]:
+    return [k for k, m in MODEL_CATALOG.items() if m.get("uncensored")]
+
+
+def assert_uncensored_model(model_key: str) -> dict[str, Any]:
+    if model_key not in MODEL_CATALOG:
+        raise KeyError(
+            f"Unknown model_key '{model_key}'. "
+            f"Uncensored only: {uncensored_model_keys()}"
+        )
+    meta = MODEL_CATALOG[model_key]
+    if REQUIRE_UNCENSORED and not meta.get("uncensored"):
+        raise ValueError(
+            f"Model '{model_key}' is censored/aligned and is BLOCKED. "
+            f"This agent only allows uncensored models: {uncensored_model_keys()}"
+        )
+    return meta
+
+
+def print_disclaimer() -> None:
+    print(DISCLAIMER_ES)
+    print(DISCLAIMER_EN)
 
 
 @dataclass
@@ -159,12 +207,11 @@ class InferenceConfig:
     def resolve_model_path(self) -> Path:
         if self.model_path and Path(self.model_path).exists():
             return Path(self.model_path)
-        if self.model_key not in MODEL_CATALOG:
-            raise KeyError(f"Unknown model_key: {self.model_key}")
-        return MODELS_DIR / MODEL_CATALOG[self.model_key]["filename"]
+        meta = assert_uncensored_model(self.model_key)
+        return MODELS_DIR / meta["filename"]
 
     def chat_format(self) -> str:
-        return MODEL_CATALOG[self.model_key]["chat_format"]
+        return assert_uncensored_model(self.model_key)["chat_format"]
 
     def to_llama_kwargs(self) -> dict[str, Any]:
         return {

@@ -30,7 +30,7 @@ class AgentPipeline:
         )
 
     def start(self, *, load_memory: bool = True, auto_download: bool = True) -> None:
-        from agent.config import AUTO_MODEL
+        from agent.config import AUTO_MODEL, assert_uncensored_model
         from agent.gpu import detect_gpu, select_model_for_gpu
 
         if self.config.inference.model_key == AUTO_MODEL:
@@ -43,6 +43,11 @@ class AgentPipeline:
             self.config.inference.max_prompt_tokens = selection.max_prompt_tokens
             self.config.inference.flash_attn = selection.flash_attn
             print(f"[select] {selection.reason}")
+
+        # Always force uncensored agent mode + block aligned catalog keys
+        self.config.uncensored = True
+        if self.config.inference.model_path is None:
+            assert_uncensored_model(self.config.inference.model_key)
 
         self.engine.load(auto_download=auto_download)
         self.memory.summarizer = self.reasoner.summarize_chunk
@@ -72,11 +77,11 @@ class AgentPipeline:
 
     def swap_model(self, model_key: str, model_path: Path | None = None) -> None:
         """Hot-swap GGUF; perception/memory/tools stay intact."""
-        from agent.config import MODEL_CATALOG
+        from agent.config import assert_uncensored_model
 
-        if model_key not in MODEL_CATALOG:
-            raise KeyError(f"Unknown model_key. Known: {list(MODEL_CATALOG)}")
+        assert_uncensored_model(model_key)
         self.engine.unload()
         self.config.inference.model_key = model_key
         self.config.inference.model_path = model_path
+        self.config.uncensored = True
         self.engine.load()

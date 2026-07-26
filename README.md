@@ -32,7 +32,7 @@ It detects your GPU (CUDA / Metal / CPU), picks a model that fits, downloads it 
 | | |
 |---|---|
 | **Offline** | Works after the first model download |
-| **Uncensored** | Aligned Instruct models are excluded from auto-select |
+| **Uncensored** | **Only** uncensored catalog models — censored/aligned keys are blocked |
 | **Smart pick** | VRAM / unified memory → best GGUF |
 | **Tools** | Shell, files, calc — extend in 5 lines |
 | **Memory** | Buffer + rolling summary + JSONL |
@@ -49,7 +49,7 @@ Detecta tu GPU (CUDA / Metal / CPU), elige el modelo que cabe, lo descarga al ar
 | | |
 |---|---|
 | **Offline** | Tras la 1ª descarga, sin internet |
-| **Sin censura** | Instruct alineados fuera del auto-select |
+| **Sin censura** | **Solo** modelos uncensored del catálogo — los alineados están bloqueados |
 | **Auto-pick** | VRAM / memoria unificada → mejor GGUF |
 | **Tools** | Shell, archivos, calc — ampliables |
 | **Memoria** | Buffer + resumen + JSONL |
@@ -66,10 +66,22 @@ Detecta tu GPU (CUDA / Metal / CPU), elige el modelo que cabe, lo descarga al ar
 | | |
 |---|---|
 | **离线** | 首次下载模型后即可离线使用 |
-| **无审查** | 对齐/审查型 Instruct 不参与自动选择 |
+| **无审查** | **仅**允许目录中的 uncensored 模型 — 对齐/审查型一律拦截 |
 | **智能选型** | 按显存/统一内存选择最佳 GGUF |
 | **工具** | Shell、文件、计算器 — 可轻松扩展 |
 | **记忆** | 缓冲 + 滚动摘要 + JSONL |
+
+---
+
+## Disclaimer · Descarga de responsabilidades · 免责声明
+
+**EN** This project downloads and runs **uncensored** models. Outputs may be offensive, adult, wrong, or illegal to misuse. **You** are solely responsible for prompts, generated content, tool/shell actions, and local law. Authors accept **no liability**. Boot/download = you accept these terms.
+
+**ES** Este proyecto descarga y ejecuta modelos **sin censura**. Puede generar contenido ofensivo, adulto o incorrecto. **Tú** eres el único responsable de lo que pides, generas, ejecutas con tools/shell y de cumplir la ley. Los autores **no** asumen responsabilidad. Arrancar/descargar = aceptas estos términos.
+
+**中文** 本项目下载并运行**无审查**模型，可能生成冒犯、成人或不正确内容。**你**对提示词、生成内容、工具/Shell 操作及遵守当地法律负全部责任。作者**不承担**任何责任。启动/下载即视为接受。
+
+The same text is printed at every `main.py` / `download_model.py` start and before each GGUF download.
 
 ---
 
@@ -170,15 +182,16 @@ First run downloads the GGUF automatically.
 
 1. Detect OS + backend  
 2. Measure VRAM / unified memory / RAM  
-3. Keep **uncensored-only** candidates  
-4. Tune `n_ctx` · `n_gpu_layers` · `n_threads`  
-5. Download if missing  
+3. Keep **uncensored-only** candidates (censored keys hard-blocked)  
+4. Prefer lowest `refusal_risk`, then quality that fits  
+5. Tune `n_ctx` · `n_gpu_layers` · `n_threads`  
+6. Download if missing  
 
 | Memory | Model | Quant |
 |--------|-------|-------|
-| ≤4–6 GB | [Qwen2.5-1.5B Uncensored ES](https://huggingface.co/mradermacher/Qwen2.5-1.5B-Uncensored_Neurotic_Spanish-GGUF) | Q4 / Q5 / Q8 |
+| ≤4–8 GB (preferred) | [Qwen2.5-1.5B Uncensored ES](https://huggingface.co/mradermacher/Qwen2.5-1.5B-Uncensored_Neurotic_Spanish-GGUF) | Q4 / Q5 / Q8 |
 | ~6 GB | Nous-Hermes-2-Mistral-7B-DPO | Q3_K_M |
-| **~8 GB** | **Hermes-2-DPO** | **Q4_K_M** |
+| ~8 GB | Hermes-2-DPO | Q4_K_M |
 | ≥10 GB | Hermes-2-DPO | Q5_K_M |
 
 ```bash
@@ -224,7 +237,7 @@ agent/
   action.py
   inference.py
   pipeline.py
-  config.py             MODEL_CATALOG (uncensored-first)
+  config.py             MODEL_CATALOG (uncensored-only) + disclaimer
 models/                 *.gguf (gitignored)
 scripts/                generated scripts
 data/memory.jsonl       persistent memory
