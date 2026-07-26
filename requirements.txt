@@ -5,7 +5,6 @@ huggingface-hub>=0.29.0
 pydantic>=2.10.0
 rich>=13.9.0
 pillow>=10.0.0
-# Optional media upgrades (not required):
-#   pyttsx3          -> offline TTS for generate_audio(mode=tts)
-#   imageio[ffmpeg]  -> MP4 export for generate_video
-#   Automatic1111/Forge local API via MEDIA_SD_API_URL for real diffusion images
+# Professional media (photoreal SD + neural TTS):
+#   python install_media_deps.py
+#   or: pip install -r requirements-media.txt

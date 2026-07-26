@@ -221,8 +221,9 @@ class ToolRegistry:
             Tool(
                 name="generate_image",
                 description=(
-                    "Generate an image from a text prompt and save PNG under outputs/media. "
-                    "Offline Pillow by default; set MEDIA_SD_API_URL for Automatic1111/Forge."
+                    "Generate a PHOTOREALISTIC professional image (PNG) under outputs/media. "
+                    "Uses Stable Diffusion (diffusers/SD-Turbo) or MEDIA_SD_API_URL. "
+                    "Install backends: python install_media_deps.py"
                 ),
                 parameters={
                     "prompt": "str",
@@ -237,8 +238,8 @@ class ToolRegistry:
             Tool(
                 name="generate_audio",
                 description=(
-                    "Generate sound WAV from a prompt (synth tone) or TTS if pyttsx3 + MEDIA_TTS=1. "
-                    "Saves under outputs/media."
+                    "Generate professional spoken audio (neural TTS via edge-tts, else SAPI). "
+                    "Saves under outputs/media (.mp3/.wav). mode=tts|tone, voice=auto|female|male."
                 ),
                 parameters={
                     "prompt": "str (description or spoken text)",
@@ -254,7 +255,8 @@ class ToolRegistry:
             Tool(
                 name="generate_video",
                 description=(
-                    "Generate a short animated video/GIF from a text prompt under outputs/media."
+                    "Generate a short PHOTOREALISTIC video/GIF (multi-frame SD) under outputs/media. "
+                    "Needs install_media_deps.py for quality; otherwise animated fallback."
                 ),
                 parameters={
                     "prompt": "str",

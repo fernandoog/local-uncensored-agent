@@ -124,22 +124,33 @@ A **heuristic planner** turns clear intents (create/delete dirs, run scripts, ge
 
 ### Media generation · Generación multimedia · 多媒体生成
 
-```text
-You> genera una imagen de un dragon de fuego
-You> genera un video de mar nocturno
-You> genera un sonido de sirena
-You> generate an image of a neon city
-You> generate a video of the ocean
-You> generate a siren sound
+Photoreal images / neural speech / multi-frame video (professional backends).
+
+```bash
+python install_media_deps.py   # once: torch + diffusers + edge-tts (~several GB)
 ```
 
-| | Default (offline) | Optional upgrade |
-|---|-------------------|------------------|
-| **Image** | Pillow abstract art + caption | `MEDIA_SD_API_URL=http://127.0.0.1:7860` (Automatic1111 / Forge) |
-| **Audio** | WAV tone/melody from prompt | `pip install pyttsx3` + `MEDIA_TTS=1` |
-| **Video** | Animated GIF | `pip install "imageio[ffmpeg]"` for MP4 |
+```text
+You> genera una imagen fotorealista de un castillo al atardecer
+You> genera un video del oceano
+You> di eres un hijo de puta
+```
 
-Outputs go to `outputs/media/` (gitignored).
+| | Professional backend | Fallback |
+|---|----------------------|----------|
+| **Image** | Stable Diffusion Turbo (`diffusers`) or `MEDIA_SD_API_URL` (A1111/Forge) | Pillow placeholder |
+| **Audio** | `edge-tts` neural voices (es-ES-Elvira/Alvaro) → Windows SAPI | tone WAV |
+| **Video** | Multi-frame photoreal SD → GIF/MP4 | animated placeholder |
+
+Files: `outputs/media/` (gitignored).
+
+Env tips:
+
+```bash
+set MEDIA_SD_MODEL=stabilityai/sd-turbo
+set MEDIA_SD_API_URL=http://127.0.0.1:7860
+set MEDIA_TTS_VOICE=es-ES-ElviraNeural
+```
 
 ### Memory & anti-refusal · Memoria y anti-negativa · 记忆与反拒绝
 
@@ -322,6 +333,7 @@ You> /exit
 main.py                 CLI (uncensored-only + disclaimer)
 install_deps.py         CUDA / Metal / CPU installer
 download_model.py       HF fetch (uncensored-only + disclaimer)
+install_media_deps.py   photoreal SD + neural TTS (optional)
 setup_windows.ps1       Win 3.12 + venv + CUDA wheel
 setup_macos.sh          macOS 3.12 + Metal (arm64) / CPU (Intel)
 smoke_hello.py          hello-world smoke test

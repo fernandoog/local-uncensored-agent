@@ -1,0 +1,23 @@
+# Optional professional media backends (photoreal image/video + neural TTS).
+# Install into the same venv:
+#   python install_media_deps.py
+# or:
+#   pip install -r requirements-media.txt
+#
+# Notes:
+# - Needs Python 3.11/3.12 (same as the agent).
+# - First image run downloads SD-Turbo (~2–4 GB) from Hugging Face.
+# - On 8 GB VRAM laptops, CPU offload is used so the LLM can stay loaded.
+# - edge-tts needs network for Microsoft neural voices (best quality speech).
+
+torch>=2.2.0
+torchvision>=0.17.0
+diffusers>=0.27.0
+transformers>=4.40.0
+accelerate>=0.28.0
+safetensors>=0.4.0
+edge-tts>=6.1.0
+imageio>=2.34.0
+imageio-ffmpeg>=0.4.9
+numpy>=1.26.0
+pillow>=10.0.0

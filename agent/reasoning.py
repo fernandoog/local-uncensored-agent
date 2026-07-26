@@ -79,8 +79,11 @@ class ReasoningEngine:
                 if isinstance(data, dict) and data.get("path"):
                     path = data["path"]
                     backend = data.get("backend", "")
-                    lines.append(f"[ok] backend={backend}")
+                    quality = data.get("quality", "")
+                    lines.append(f"[ok] backend={backend} quality={quality}")
                     lines.append(f"[archivo] {path}")
+                    if data.get("hint"):
+                        lines.append(f"[hint] {data['hint']}")
                 else:
                     lines.append(result)
             except Exception:
