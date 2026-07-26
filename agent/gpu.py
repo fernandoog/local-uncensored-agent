@@ -279,7 +279,14 @@ def select_model_for_gpu(gpu: DeviceInfo | None = None) -> ModelSelection:
                 continue
             weight = int(meta.get("weight_mb", 99999))
             unc = 1_000_000 if meta.get("uncensored") else 0
-            score = unc + int(meta.get("quality_score", 0)) * 10_000 + weight
+            # Prefer truly low-refusal models when uncensored mode is on
+            risk = int(meta.get("refusal_risk", 50))
+            score = (
+                unc
+                + (100 - risk) * 100_000
+                + int(meta.get("quality_score", 0)) * 10_000
+                + weight
+            )
             out.append((score, key, meta))
         return out
 

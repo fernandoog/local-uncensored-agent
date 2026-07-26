@@ -24,6 +24,8 @@ class MemoryStore:
     def load_persistent(self) -> None:
         if not self.persist_path or not self.persist_path.exists():
             return
+        from agent.refusal import looks_like_refusal
+
         with self.persist_path.open("r", encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
@@ -31,9 +33,15 @@ class MemoryStore:
                     continue
                 rec = json.loads(line)
                 if rec.get("type") == "summary":
-                    self.summary = rec.get("content", self.summary)
+                    content = rec.get("content", self.summary)
+                    if not looks_like_refusal(content):
+                        self.summary = content
                 elif rec.get("type") == "message":
-                    self.buffer.append({"role": rec["role"], "content": rec["content"]})
+                    content = rec.get("content", "")
+                    # Drop past refusals so they don't poison future turns
+                    if looks_like_refusal(content):
+                        continue
+                    self.buffer.append({"role": rec["role"], "content": content})
 
     def _append_persist(self, record: dict) -> None:
         if not self.persist_path:

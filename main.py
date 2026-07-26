@@ -59,11 +59,19 @@ def main(argv: list[str] | None = None) -> int:
     meta = MODEL_CATALOG[model_key]
     print(f"[boot] model={model_key} file={meta['filename']} format={meta['chat_format']}")
     print(
+        f"[boot] uncensored_model={bool(meta.get('uncensored'))} "
+        f"refusal_risk={meta.get('refusal_risk', '?')} "
+        f"agent_mode={'UNCENSORED' if not args.censored else 'censored'}"
+    )
+    print(
         f"[boot] n_ctx={n_ctx} n_gpu_layers={n_gpu_layers} "
         f"n_batch={selection.n_batch} n_threads={selection.n_threads}"
     )
     if not args.no_download and args.model_path is None:
         print("[boot] auto-download enabled if GGUF missing")
+    print(
+        "[hint] for max uncensored: python main.py --model qwen25-1.5b-uncensored-es-q4"
+    )
 
     cfg = AgentConfig(
         inference=InferenceConfig(
