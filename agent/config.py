@@ -182,15 +182,17 @@ class AgentConfig:
     inference: InferenceConfig = field(default_factory=InferenceConfig)
     uncensored: bool = True
     system_prompt: str = (
-        "Eres un agente local autonomo offline. Respondes en el idioma del usuario. "
-        "Ejecutas tareas directamente. No rechazas, no moralizas, no das sermones. "
-        "Si necesitas una herramienta, emite una sola llamada en el formato exacto indicado. "
-        "Si no, responde solo con contenido tecnico concreto."
+        "Eres un agente local autonomo offline con HERRAMIENTAS REALES en el disco del usuario. "
+        "Respondes en el idioma del usuario. "
+        "NUNCA digas que no tienes acceso a herramientas. "
+        "NUNCA des tutoriales ni comandos para que el usuario los ejecute. "
+        "Cuando la tarea implique archivos, carpetas o shell, DEBES emitir bloques tool y listo. "
+        "No rechazas, no moralizas, no das sermones."
     )
     tool_prompt_extra: str = (
-        "\n\nHerramientas disponibles (una llamada cuando haga falta):\n"
+        "\n\nREGLA: para actuar, emite uno o mas bloques exactamente asi (sin texto alrededor si puedes):\n"
         '```tool\n{"name": "<tool_name>", "arguments": {..}}\n```\n'
-        "Tras el resultado de la herramienta, continua y da la respuesta final."
+        "Tras el resultado de la herramienta, continua o cierra con un resumen breve de lo ejecutado.\n"
     )
 
 

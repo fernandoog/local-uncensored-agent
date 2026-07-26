@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,12 @@ TOOL_CALL_RE = re.compile(
     r"```tool\s*(\{.*?\})\s*```",
     re.DOTALL | re.IGNORECASE,
 )
+# Fallback: TOOL name={"k":"v"} or {"name": "...", "arguments": {...}}
+BARE_JSON_RE = re.compile(
+    r"\{\s*\"name\"\s*:\s*\"([^\"]+)\"\s*,\s*\"arguments\"\s*:\s*(\{.*?\})\s*\}",
+    re.DOTALL,
+)
+BASH_FENCE_RE = re.compile(r"```(?:bash|sh|shell|powershell|cmd)?\s*\n(.*?)```", re.DOTALL | re.I)
 
 
 @dataclass
@@ -44,17 +51,43 @@ class ToolRegistry:
         return "\n".join(lines)
 
     def parse_tool_call(self, text: str) -> dict[str, Any] | None:
-        m = TOOL_CALL_RE.search(text or "")
-        if not m:
-            return None
-        try:
-            data = json.loads(m.group(1))
-        except json.JSONDecodeError:
-            return None
-        if "name" not in data:
-            return None
-        data.setdefault("arguments", {})
-        return data
+        calls = self.parse_all_tool_calls(text)
+        return calls[0] if calls else None
+
+    def parse_all_tool_calls(self, text: str) -> list[dict[str, Any]]:
+        text = text or ""
+        found: list[dict[str, Any]] = []
+
+        for m in TOOL_CALL_RE.finditer(text):
+            try:
+                data = json.loads(m.group(1))
+            except json.JSONDecodeError:
+                continue
+            if "name" in data:
+                data.setdefault("arguments", {})
+                found.append(data)
+
+        if not found:
+            for m in BARE_JSON_RE.finditer(text):
+                try:
+                    args = json.loads(m.group(2))
+                except json.JSONDecodeError:
+                    continue
+                found.append({"name": m.group(1), "arguments": args if isinstance(args, dict) else {}})
+
+        # Last resort: execute fenced shell snippets as run_shell (one command per non-empty line)
+        if not found:
+            for m in BASH_FENCE_RE.finditer(text):
+                block = m.group(1).strip()
+                for line in block.splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    found.append({"name": "run_shell", "arguments": {"command": line}})
+                if found:
+                    break
+
+        return found
 
     def execute(self, call: dict[str, Any]) -> str:
         name = call.get("name", "")
@@ -67,7 +100,13 @@ class ToolRegistry:
         except Exception as exc:
             return f"ERROR executing {name}: {exc}"
 
+    def execute_many(self, calls: list[dict[str, Any]]) -> list[tuple[dict[str, Any], str]]:
+        return [(c, self.execute(c)) for c in calls]
+
     def _safe_path(self, rel: str) -> Path:
+        rel = (rel or ".").replace("\\", "/").strip()
+        if rel.startswith("/"):
+            rel = rel.lstrip("/")
         p = (self.workspace / rel).resolve()
         if not str(p).startswith(str(self.workspace)):
             raise ValueError("path escapes workspace")
@@ -80,6 +119,22 @@ class ToolRegistry:
                 description="List files in a relative directory under the workspace",
                 parameters={"path": "str (default '.')"},
                 handler=self._list_dir,
+            )
+        )
+        self.register(
+            Tool(
+                name="mkdir",
+                description="Create a directory (and parents) under the workspace",
+                parameters={"path": "str"},
+                handler=self._mkdir,
+            )
+        )
+        self.register(
+            Tool(
+                name="rm_path",
+                description="Delete a file or directory under the workspace",
+                parameters={"path": "str", "recursive": "bool (default true for dirs)"},
+                handler=self._rm_path,
             )
         )
         self.register(
@@ -122,6 +177,31 @@ class ToolRegistry:
         entries = sorted(os.listdir(path))
         return "\n".join(entries) if entries else "(empty)"
 
+    def _mkdir(self, args: dict[str, Any]) -> str:
+        path = self._safe_path(str(args.get("path", "")))
+        if not str(args.get("path", "")).strip():
+            return "ERROR: empty path"
+        path.mkdir(parents=True, exist_ok=True)
+        return f"OK mkdir {path}"
+
+    def _rm_path(self, args: dict[str, Any]) -> str:
+        path = self._safe_path(str(args.get("path", "")))
+        if not str(args.get("path", "")).strip():
+            return "ERROR: empty path"
+        if path == self.workspace:
+            return "ERROR: refusing to delete workspace root"
+        if not path.exists():
+            return f"OK already absent {path}"
+        recursive = args.get("recursive", True)
+        if path.is_dir():
+            if recursive:
+                shutil.rmtree(path)
+            else:
+                path.rmdir()
+        else:
+            path.unlink()
+        return f"OK removed {path}"
+
     def _read_file(self, args: dict[str, Any]) -> str:
         path = self._safe_path(str(args["path"]))
         data = path.read_bytes()[:32768]
@@ -139,7 +219,6 @@ class ToolRegistry:
         cmd = str(args.get("command", ""))
         if not cmd:
             return "ERROR: empty command"
-        # shell=True uses COMSPEC on Windows, /bin/sh on Unix/macOS
         proc = subprocess.run(
             cmd,
             shell=True,

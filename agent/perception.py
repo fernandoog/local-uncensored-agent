@@ -16,7 +16,32 @@ class Perception:
     """Map stdin / API text → ChatML-ready user message + light intent tag."""
 
     INTENT_HINTS = (
-        ("tool", ("run", "execute", "lista", "list", "archivo", "file", "cmd", "shell", "busca")),
+        (
+            "tool",
+            (
+                "run",
+                "execute",
+                "lista",
+                "list",
+                "archivo",
+                "file",
+                "cmd",
+                "shell",
+                "busca",
+                "crea",
+                "crear",
+                "borra",
+                "borrar",
+                "elimina",
+                "mkdir",
+                "rm",
+                "directorio",
+                "carpeta",
+                "escribe",
+                "lee",
+                "calcula",
+            ),
+        ),
         ("memory", ("recuerda", "remember", "olvida", "forget", "historial")),
         ("chat", ()),
     )
