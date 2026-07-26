@@ -1,4 +1,4 @@
-"""Heuristic action planner for reliable local FS / shell / script tasks.
+"""Heuristic action planner for reliable local FS / shell / script / media tasks.
 
 Small GGUF models often explain commands instead of emitting tool calls.
 This planner turns clear user intents into concrete tool invocations.
@@ -62,7 +62,6 @@ def _name_from_text(text: str, default: str = "_agent_tmp") -> str:
 
 def _detect_language(text: str) -> str | None:
     lower = text.lower()
-    # explicit extension
     m = re.search(r"\.(py|js|ts|sh|ps1|bat|cmd|rb|pl|php|lua|r|go|rs|c|cpp|java|cs)\b", lower)
     if m:
         from agent.runners import detect_lang_from_path
@@ -72,7 +71,6 @@ def _detect_language(text: str) -> str | None:
             return detect_lang_from_path(Path(f"x.{m.group(1)}"))
         except ValueError:
             pass
-    # language keywords (longest / specific first)
     patterns = [
         (r"\b(power\s*shell|powershell|pwsh)\b", "powershell"),
         (r"\b(type\s*script|typescript)\b", "typescript"),
@@ -102,7 +100,6 @@ def _extract_inline_code(text: str) -> tuple[str | None, str | None]:
     m = CODE_FENCE_RE.search(text or "")
     if m:
         return m.group(1).lower(), m.group(2).strip()
-    # triple-ish freeform: code after ":" or "que "
     return None, None
 
 
@@ -116,7 +113,6 @@ def plan_actions(user_text: str) -> list[dict[str, Any]]:
     if not lower:
         return []
 
-    # Media FIRST — never let the LLM invent fake afplay/ffmpeg paths
     media_plan = _plan_media(t, lower)
     if media_plan:
         return media_plan
@@ -176,10 +172,8 @@ def plan_actions(user_text: str) -> list[dict[str, Any]]:
         re.search(r"\b(ejecuta|ejecutar|run|shell|cmd|powershell|comando)\b", lower)
     )
 
-    # Script create / run (prefer before generic shell)
     if wants_script and lang:
         code = fence_code or default_hello(lang)
-        # lightweight intent: print hello
         if not fence_code and re.search(r"\b(hola|hello|world|mundo)\b", lower):
             code = default_hello(lang)
         name = _name_from_text(t, default="")
@@ -217,16 +211,14 @@ def plan_actions(user_text: str) -> list[dict[str, Any]]:
             }
         ]
 
-    # run existing script path
     m_path = re.search(
         r"(?:ejecuta|ejecutar|run|corre)\s+(?:el\s+)?(?:script\s+)?[\"']?([A-Za-z0-9._\\/-]+\.(?:py|js|ts|sh|ps1|bat|cmd|rb|pl|php|lua|r|go|rs|c|cpp|java|cs))[\"']?",
         t,
         re.I,
     )
     if m_path:
-        return [{"name": "run_script", "arguments": {"path": m_path.group(1).replace('\\', '/')}}]
+        return [{"name": "run_script", "arguments": {"path": m_path.group(1).replace("\\", "/")}}]
 
-    # Explicit shell command in backticks
     m_cmd = re.search(r"`([^`]+)`", t)
     if wants_shell and m_cmd and not wants_script:
         return [{"name": "run_shell", "arguments": {"command": m_cmd.group(1).strip()}}]
@@ -278,38 +270,52 @@ def plan_actions(user_text: str) -> list[dict[str, Any]]:
 
 
 def _extract_spoken_text(text: str) -> str | None:
-    """Pull the words to speak from 'di/diciendo/saying/que diga ...'."""
+    """Only explicit speak-commands: di X / say X / pronuncia X / diciendo X."""
     t = (text or "").strip()
-    m = re.search(r"[\"'](.+?)[\"']", t)
-    if m and len(m.group(1).strip()) >= 1:
-        return m.group(1).strip()
-    # Short command: "di X" / "di: X" / "say X"
     m = re.search(
-        r"^(?:di|dile|diga|digas|say|speak|habla|pronuncia)\s*[:=]?\s+(.+)$",
+        r"(?:^|\b)(?:di|dile|diga|digas|say|pronuncia|tts)\s*[:=]?\s*[\"'](.+?)[\"']",
+        t,
+        re.I,
+    )
+    if m and m.group(1).strip():
+        return m.group(1).strip()
+    m = re.match(
+        r"^(?:di|dile|diga|digas|say|pronuncia)\s+[:=]?\s*(.+)$",
         t,
         re.I,
     )
     if m:
         spoken = m.group(1).strip(" .\"'")
-        if spoken:
+        if spoken and not re.match(
+            r"^(me\b|nos\b|te\b|de\s+ti|sobre\s+ti|algo\b)",
+            spoken,
+            re.I,
+        ):
             return spoken
     m = re.search(
-        r"(?:diciendo|saying|say(?:ing)?|habla(?:ndo)?|que\s+diga|que\s+digas|"
-        r"pronunc(?:ia|iar)|speak(?:ing)?)\s*[:=]?\s*(.+)$",
+        r"(?:diciendo|saying|que\s+diga|que\s+digas)\s*[:=]?\s*(.+)$",
         t,
         re.I,
     )
     if m:
         spoken = m.group(1).strip(" .\"'")
-        spoken = re.sub(
-            r"^(que\s+|esto\s+|lo\s+siguiente\s*:\s*)",
-            "",
-            spoken,
-            flags=re.I,
-        ).strip()
         if spoken:
             return spoken
     return None
+
+
+def _wants_text_prompt_only(lower: str) -> bool:
+    """User wants a TEXT prompt for SD, not to generate the image now."""
+    if not re.search(r"\bprompts?\b", lower):
+        return False
+    return bool(
+        re.search(
+            r"\b(haz|hacer|escribe|escribir|crea|crear|dame|redacta|inventa|genera|generate)\b"
+            r".{0,40}\bprompts?\b"
+            r"|\bprompts?\b.{0,40}\b(para\s+(ti|m[ií]|generar|usar)|de\s+texto)\b",
+            lower,
+        )
+    )
 
 
 def _extract_media_prompt(text: str) -> str:
@@ -321,7 +327,7 @@ def _extract_media_prompt(text: str) -> str:
     if m and len(m.group(1).strip()) >= 2:
         return m.group(1).strip()
     m = re.search(
-        r"(?:imagen|image|foto|photo|video|clip|gif|audio|sonido|sound|musica|music|wav|tts|voz)"
+        r"(?:imagen|image|foto|photo|video|clip|gif|audio|sonido|sound|musica|music|wav)"
         r"\s+(?:de|of|sobre|about|con|with|:)\s+(.+)$",
         t,
         re.I,
@@ -329,9 +335,9 @@ def _extract_media_prompt(text: str) -> str:
     if m:
         return m.group(1).strip(" .")
     m = re.search(
-        r"(?:genera|generar|generate|haz|hacer|crea|crear|make)\s+"
+        r"(?:genera|generar|generate|crea|crear|dibuja|dibujar|pinta|pintar|render(?:iza)?)\s+"
         r"(?:el\s+|la\s+|una?\s+|un\s+)?(?:imagen|image|foto|photo|video|clip|gif|audio|sonido|sound|"
-        r"musica|music|wav|tts|voz)?\s*(?:de|of|sobre|about|con|with|:)?\s*(.+)$",
+        r"musica|music|wav)?\s*(?:de|of|sobre|about|con|with|:)?\s*(.+)$",
         t,
         re.I,
     )
@@ -350,12 +356,18 @@ def _extract_media_prompt(text: str) -> str:
 
 
 def _plan_media(text: str, lower: str) -> list[dict[str, Any]]:
-    spoken = _extract_spoken_text(text)
-    # Bare speech commands: "di hijo puta", "say hello"
-    if spoken and re.match(
-        r"^(?:di|dile|diga|digas|say|speak|habla|pronuncia)\b",
+    # Chat / "write me a prompt" → never force media tools
+    if _wants_text_prompt_only(lower):
+        return []
+    if re.search(
+        r"\b(hablame|háblame|cuentame|cuéntame|explicame|explícame|dime\s+algo|"
+        r"quien\s+eres|quién\s+eres|como\s+estas|cómo\s+estás)\b",
         lower,
     ):
+        return []
+
+    spoken = _extract_spoken_text(text)
+    if spoken and re.match(r"^(?:di|dile|diga|digas|say|pronuncia)\b", lower):
         return [
             {
                 "name": "generate_audio",
@@ -370,8 +382,14 @@ def _plan_media(text: str, lower: str) -> list[dict[str, Any]]:
 
     wants_gen = bool(
         re.search(
-            r"\b(genera|generar|generate|haz|hacer|crea|crear|make|draw|pinta|pintar|"
-            r"render|synth|sintetiza|sintetizar)\b",
+            r"\b(genera|generar|generate|dibuja|dibujar|pinta|pintar|render|renderiza|"
+            r"synth|sintetiza|sintetizar)\b",
+            lower,
+        )
+    )
+    wants_make_image = bool(
+        re.search(
+            r"\b(haz|hacer|crea|crear|make)\s+(una?\s+|un\s+)?(imagen|image|foto|photo|dibujo)\b",
             lower,
         )
     )
@@ -383,41 +401,49 @@ def _plan_media(text: str, lower: str) -> list[dict[str, Any]]:
     )
     is_audio = bool(
         re.search(
-            r"\b(audio|sonido|sound|musica|música|music|wav|mp3|tts|voz|voice|tone|tono|"
-            r"beep|alarma|sirena|habla|hablar|diciendo|saying)\b",
+            r"\b(audio|sonido|sound|musica|música|music|wav|mp3|tts|beep|alarma|sirena)\b",
             lower,
         )
-        or spoken is not None
     )
-    if not (is_image or is_video or is_audio):
-        return []
-    bare = bool(re.search(r"\b(de|of|:)\b", lower))
-    if not (wants_gen or bare or spoken):
-        return []
 
-    prompt = spoken or _extract_media_prompt(text)
-    if is_video:
-        return [{"name": "generate_video", "arguments": {"prompt": prompt, "seconds": 2}}]
-    if is_audio or spoken:
-        speech = spoken is not None or bool(
-            re.search(
-                r"\b(tts|voz|voice|habla|hablar|speak|diciendo|saying|diga|digas|pronuncia|di)\b",
-                lower,
-            )
+    if is_video and (
+        wants_gen or re.search(r"\b(haz|crea|make)\s+(un\s+)?(video|vídeo|clip|gif)\b", lower)
+    ):
+        return [
+            {
+                "name": "generate_video",
+                "arguments": {"prompt": spoken or _extract_media_prompt(text), "seconds": 2},
+            }
+        ]
+
+    if is_audio and (
+        wants_gen
+        or re.search(
+            r"\b(haz|crea|make|genera)\s+(un\s+|una\s+)?(audio|sonido|sound|musica)\b",
+            lower,
         )
+        or (spoken and re.search(r"\b(sonido|audio|tts)\b", lower))
+    ):
+        prompt = spoken or _extract_media_prompt(text)
+        speech = spoken is not None or bool(re.search(r"\b(tts|diciendo|saying|diga)\b", lower))
         voice = "auto"
         if re.search(r"\b(mujer|woman|female|chica|girl)\b", lower):
             voice = "female"
         elif re.search(r"\b(hombre|man|male|chico|boy)\b", lower):
             voice = "male"
-        mode = "tts" if speech else "tone"
-        if re.search(r"\b(mujer|hombre|woman|man|voice|voz)\b", lower) and wants_gen:
-            mode = "tts"
-        args: dict[str, Any] = {
-            "prompt": prompt,
-            "seconds": 4,
-            "mode": mode,
-            "voice": voice,
-        }
-        return [{"name": "generate_audio", "arguments": args}]
-    return [{"name": "generate_image", "arguments": {"prompt": prompt}}]
+        return [
+            {
+                "name": "generate_audio",
+                "arguments": {
+                    "prompt": prompt,
+                    "seconds": 4,
+                    "mode": "tts" if speech else "tone",
+                    "voice": voice,
+                },
+            }
+        ]
+
+    if is_image and (wants_gen or wants_make_image):
+        return [{"name": "generate_image", "arguments": {"prompt": _extract_media_prompt(text)}}]
+
+    return []

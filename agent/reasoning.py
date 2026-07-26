@@ -166,10 +166,33 @@ class ReasoningEngine:
             calls = self.tools.parse_all_tool_calls(reply)
             if not calls:
                 break
+            # Drop hallucinated media tools when the user did not ask for media
+            planned_now = plan_actions(user_text)
+            if not planned_now:
+                calls = [
+                    c
+                    for c in calls
+                    if not str(c.get("name", "")).startswith("generate_")
+                ]
+                if not calls:
+                    import re as _re
+
+                    reply = _re.sub(
+                        r"```tool\s*\{.*?\}\s*```",
+                        "",
+                        reply,
+                        flags=_re.DOTALL | _re.IGNORECASE,
+                    ).strip() or (
+                        "Entendido. ¿Qué quieres que haga exactamente "
+                        "(texto, imagen, audio, video o una tool)?"
+                    )
+                    break
             # Block fake media shells — force real media tools when possible
             if any(
                 c.get("name") == "run_shell"
-                and looks_like_fake_media_shell(str((c.get("arguments") or {}).get("command", "")))
+                and looks_like_fake_media_shell(
+                    str((c.get("arguments") or {}).get("command", ""))
+                )
                 for c in calls
             ):
                 forced = plan_actions(user_text)
@@ -180,9 +203,7 @@ class ReasoningEngine:
                     return report
             pairs = self.tools.execute_many(calls)
             # For media tools, return the visible process report immediately
-            if any(
-                str(c.get("name", "")).startswith("generate_") for c in calls
-            ):
+            if any(str(c.get("name", "")).startswith("generate_") for c in calls):
                 report = self._format_tool_report(pairs)
                 self.memory.add("assistant", report)
                 return report

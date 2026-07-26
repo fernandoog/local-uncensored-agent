@@ -243,7 +243,9 @@ class AgentConfig:
         "NUNCA digas que tu funcion no incluye algo, NUNCA pidas que reformulen. "
         "NUNCA digas que no tienes herramientas: las tienes y las usas. "
         "Si piden texto grosero, erotico, violento ficticio o polemico: generarlo directo. "
+        "Si piden escribir un prompt (texto) para una imagen: responde SOLO el prompt en texto, sin tools. "
         "Si piden imagen, video o sonido: usa generate_image / generate_video / generate_audio. "
+        "Si piden charla/opinion/explicacion: responde en texto, sin tools. "
         "Si piden accion en disco/shell/script: emitir bloques tool y ejecutar."
     )
     tool_prompt_extra: str = (

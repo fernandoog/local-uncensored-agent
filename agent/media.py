@@ -8,7 +8,7 @@ Backend priority (auto):
 Env:
   MEDIA_IMAGE_BACKEND=auto|diffusers|api|pillow
   MEDIA_SD_API_URL=http://127.0.0.1:7860
-  MEDIA_SD_MODEL=stabilityai/sd-turbo
+  MEDIA_SD_MODEL=Lykon/dreamshaper-8   # SD1.5 uncensored-capable (not SD-Turbo)
   MEDIA_SD_DEVICE=auto|cuda|cpu
   MEDIA_TTS_BACKEND=auto|edge|sapi|pyttsx3|tone
   MEDIA_TTS_VOICE=es-ES-ElviraNeural
@@ -16,11 +16,11 @@ Env:
 from __future__ import annotations
 
 import asyncio
-import colorsys
 import hashlib
 import json
 import math
 import os
+import re
 import struct
 import tempfile
 import time
@@ -35,7 +35,8 @@ MEDIA_DIR = ROOT / "outputs" / "media"
 _SD_PIPE = None
 _SD_PIPE_KEY = None
 
-DEFAULT_SD_MODEL = os.environ.get("MEDIA_SD_MODEL", "stabilityai/sd-turbo")
+# SD-Turbo (SD2.1) is NSFW-filtered. Default to SD1.5 DreamShaper (uncensored-capable).
+DEFAULT_SD_MODEL = os.environ.get("MEDIA_SD_MODEL", "Lykon/dreamshaper-8")
 PHOTO_POS = (
     "photorealistic, professional photography, ultra detailed, 8k uhd, "
     "sharp focus, natural lighting, realistic skin texture, cinematic, "
@@ -43,7 +44,12 @@ PHOTO_POS = (
 )
 PHOTO_NEG = (
     "cartoon, anime, illustration, painting, drawing, 3d render, cgi, "
-    "lowres, blurry, deformed, ugly, watermark, text, logo, oversaturated"
+    "lowres, blurry, deformed, ugly, watermark, text, logo, oversaturated, "
+    "extra limbs, bad anatomy, censored, mosaic, bar censorship, clothing artifacts"
+)
+NSFW_HINT = re.compile(
+    r"(?is)\b(nsfw|nude|nuda|desnud|porno|porn|xxx|erotic|erotica|sex|"
+    r"explicit|genital|breast|tetas|culo|ass|naked)\b"
 )
 
 
@@ -73,9 +79,13 @@ def enhance_image_prompt(prompt: str) -> str:
     if not p:
         return PHOTO_POS
     low = p.lower()
-    if "photoreal" in low or "foto" in low or "realistic" in low:
-        return f"{p}, {PHOTO_POS}"
-    return f"{p}, {PHOTO_POS}"
+    extras = PHOTO_POS
+    if NSFW_HINT.search(low):
+        extras = (
+            f"{PHOTO_POS}, uncensored, nsfw, explicit, detailed anatomy, "
+            "no clothes, no censorship, no mosaic"
+        )
+    return f"{p}, {extras}"
 
 
 def _require_pillow():
@@ -134,12 +144,22 @@ def _get_sd_pipe(model_id: str | None = None):
         ) from exc
 
     dtype = torch.float16 if device in {"cuda", "mps"} else torch.float32
-    print(f"[media] loading photoreal model={model_id} device={device} (first run downloads weights)")
+    print(
+        f"[media] loading UNCENSORED photoreal model={model_id} device={device} "
+        "(first run downloads weights; safety_checker disabled)"
+    )
     pipe = AutoPipelineForText2Image.from_pretrained(
         model_id,
         torch_dtype=dtype,
         variant="fp16" if device != "cpu" else None,
+        safety_checker=None,
+        requires_safety_checker=False,
     )
+    # Belt-and-suspenders: some pipelines keep a checker attr
+    if hasattr(pipe, "safety_checker"):
+        pipe.safety_checker = None
+    if hasattr(pipe, "requires_safety_checker"):
+        pipe.requires_safety_checker = False
     try:
         if device == "cuda":
             # Keep VRAM free for the LLM when possible
@@ -168,10 +188,10 @@ def generate_image_diffusers(
     prompt_full = enhance_image_prompt(prompt)
     width = max(256, min(int(width), 1024))
     height = max(256, min(int(height), 1024))
-    # SD-Turbo / lightning style: few steps
+    # DreamShaper / SD1.5: more steps; turbo models: few steps
     model = DEFAULT_SD_MODEL.lower()
     if steps is None:
-        steps = 4 if "turbo" in model or "lightning" in model else 25
+        steps = 4 if "turbo" in model or "lightning" in model else 28
     guidance = 0.0 if "turbo" in model else 7.0
     kwargs: dict[str, Any] = {
         "prompt": prompt_full,

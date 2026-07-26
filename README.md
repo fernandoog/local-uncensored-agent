@@ -138,7 +138,7 @@ You> di eres un hijo de puta
 
 | | Professional backend | Fallback |
 |---|----------------------|----------|
-| **Image** | Stable Diffusion Turbo (`diffusers`) or `MEDIA_SD_API_URL` (A1111/Forge) | Pillow placeholder |
+| **Image** | DreamShaper-8 / SD1.5 (`diffusers`, safety off) or `MEDIA_SD_API_URL` | Pillow placeholder |
 | **Audio** | `edge-tts` neural voices (es-ES-Elvira/Alvaro) → Windows SAPI | tone WAV |
 | **Video** | Multi-frame photoreal SD → GIF/MP4 | animated placeholder |
 
@@ -147,10 +147,12 @@ Files: `outputs/media/` (gitignored).
 Env tips:
 
 ```bash
-set MEDIA_SD_MODEL=stabilityai/sd-turbo
+set MEDIA_SD_MODEL=Lykon/dreamshaper-8
 set MEDIA_SD_API_URL=http://127.0.0.1:7860
 set MEDIA_TTS_VOICE=es-ES-ElviraNeural
 ```
+
+> **Note:** `stabilityai/sd-turbo` is NSFW-filtered (SD2.1). This project defaults to **DreamShaper-8** (SD1.5 family, uncensored-capable) with `safety_checker` disabled.
 
 ### Memory & anti-refusal · Memoria y anti-negativa · 记忆与反拒绝
 
